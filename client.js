@@ -21,6 +21,135 @@ window.__ModuleLoader__.load({
     const POLL_MS = 5000
     const LOG = '[dsh-doom-loop-guard]'
 
+    // 界面文案：走宿主 locale 服务（ctx.locale），随界面语言切换即时更新。
+    // locale/*.json 只放插件清单的 meta，不承载界面文案——界面字典必须内联在 client 里。
+    const NS = 'doomLoopGuard'
+    const DICTS = {
+      zh: {
+        nav: '推理死循环防护',
+        title: '推理死循环防护',
+        desc: '检测推理中的重复循环，命中时提醒、截断或响铃。',
+        'status.connecting': '连接中…',
+        'status.unavailable': '不可用',
+        'status.running': '运行中',
+        'status.paused': '已暂停',
+        level: '防护等级',
+        'level.relaxed': '宽松',
+        'level.standard': '普通',
+        'level.sensitive': '敏感',
+        'level.hint': '宽松少打扰，敏感更早介入',
+        'level.saved': '防护等级：{value}',
+        action: '命中处理',
+        'action.observe': '只记录',
+        'action.nudge': '提醒',
+        'action.cut': '截断',
+        'action.hint': '提醒会注入提示词禁用循环字符,截断会中止当前输出',
+        'action.warn': '（截断模式，如果有自动续跑等插件，可能会导致无限循环）',
+        'action.saved': '命中处理：{value}',
+        threshold: '生效门槛',
+        'threshold.always': '全程生效',
+        'threshold.after': '{percent}% 后生效',
+        sound: '提示音',
+        'sound.hint': '命中时播放',
+        'sound.test': '试听',
+        'sound.on': '已开启',
+        'sound.off': '已关闭',
+        'sound.played': '已播放',
+        'sound.failed': '播放失败',
+        'sound.testFailed': '试听失败',
+        report: '历史报告',
+        'report.scanned': '已扫描 {count} 个会话',
+        'report.notScanned': '未扫描',
+        'report.scanning': '扫描中…',
+        'report.scan': '扫描',
+        'report.empty': '还没有扫描结果',
+        'report.clean': '已扫描 {count} 个会话，没有发现循环',
+        'report.blocks': '{collapsed}/{reasoning} 块',
+        'stat.sessions': '命中会话',
+        'stat.hits': '命中条数',
+        'stat.maxDoom': '最高 doom',
+        lastHit: '最近命中：{time} · {kind} · 注入 {inject}',
+        'kind.symbol': '符号填充',
+        'kind.phrase': '短句循环',
+        'inject.ok': '成功',
+        'inject.noAgent': '未找到 agent',
+        'inject.error': '失败',
+        'inject.none': '未触发',
+        saved: '已保存',
+        saveFailed: '保存失败',
+        'err.host': '无法连接宿主路由',
+        'err.scan': '扫描失败',
+        sep: '：'
+      },
+      en: {
+        nav: 'Doom Loop Guard',
+        title: 'Doom Loop Guard',
+        desc: 'Detects repetitive loops in reasoning and nudges, cuts, or chimes on a hit.',
+        'status.connecting': 'Connecting…',
+        'status.unavailable': 'Unavailable',
+        'status.running': 'Running',
+        'status.paused': 'Paused',
+        level: 'Protection level',
+        'level.relaxed': 'Relaxed',
+        'level.standard': 'Standard',
+        'level.sensitive': 'Sensitive',
+        'level.hint': 'Relaxed interrupts less; sensitive steps in earlier',
+        'level.saved': 'Protection level: {value}',
+        action: 'On a hit',
+        'action.observe': 'Record only',
+        'action.nudge': 'Nudge',
+        'action.cut': 'Cut',
+        'action.hint': 'A nudge injects a prompt that bans loop characters; cut aborts the current output',
+        'action.warn': '(In cut mode, an auto-continue plugin may keep the loop going indefinitely)',
+        'action.saved': 'On a hit: {value}',
+        threshold: 'Activation threshold',
+        'threshold.always': 'Always active',
+        'threshold.after': 'Active above {percent}%',
+        sound: 'Chime',
+        'sound.hint': 'Plays on a hit',
+        'sound.test': 'Preview',
+        'sound.on': 'On',
+        'sound.off': 'Off',
+        'sound.played': 'Played',
+        'sound.failed': 'Playback failed',
+        'sound.testFailed': 'Preview failed',
+        report: 'History report',
+        'report.scanned': 'Scanned {count} sessions',
+        'report.notScanned': 'Not scanned',
+        'report.scanning': 'Scanning…',
+        'report.scan': 'Scan',
+        'report.empty': 'No scan results yet',
+        'report.clean': 'Scanned {count} sessions; no loops found',
+        'report.blocks': '{collapsed}/{reasoning} blocks',
+        'stat.sessions': 'Sessions hit',
+        'stat.hits': 'Hits',
+        'stat.maxDoom': 'Peak doom',
+        lastHit: 'Last hit: {time} · {kind} · injected {inject}',
+        'kind.symbol': 'Symbol padding',
+        'kind.phrase': 'Phrase repeat',
+        'inject.ok': 'ok',
+        'inject.noAgent': 'no agent',
+        'inject.error': 'failed',
+        'inject.none': 'not fired',
+        saved: 'Saved',
+        saveFailed: 'Save failed',
+        'err.host': 'Cannot reach the host route',
+        'err.scan': 'Scan failed',
+        sep: ': '
+      }
+    }
+
+    /** lastEvent.inject 取值 → 字典键（未知值仍渲染破折号，保持原行为）。 */
+    const INJECT_KEY = { ok: 'inject.ok', 'no-agent': 'inject.noAgent', error: 'inject.error', none: 'inject.none' }
+
+    /** 占位符替换，语义与宿主 locale 的 translate 一致（`{name}` → params.name）。 */
+    function fill (template, params) {      if (!params) return template
+      return template.replace(/\{(\w+)\}/g, (m, name) => (name in params ? String(params[name]) : m))
+    }
+
+    // apply 前只有兜底值（内置中文）；宿主 locale 可用时替换为 bind(NS)。
+    let t = (key, params) => fill(DICTS.zh[key] === undefined ? key : DICTS.zh[key], params)
+
     const DEFAULTS = {
       enabled: true,
       maxDashRun: 800,
@@ -72,7 +201,7 @@ window.__ModuleLoader__.load({
           lastEvent: j.lastEvent || null
         }
       } catch (e) {
-        state = { ...state, loading: false, error: (e && e.message) || '无法连接宿主路由' }
+        state = { ...state, loading: false, error: (e && e.message) || t('err.host') }
       }
       emit()
     }
@@ -87,7 +216,7 @@ window.__ModuleLoader__.load({
         const j = await r.json()
         state = { ...state, scanning: false, report: j, scanError: null }
       } catch (e) {
-        state = { ...state, scanning: false, scanError: (e && e.message) || '扫描失败' }
+        state = { ...state, scanning: false, scanError: (e && e.message) || t('err.scan') }
       }
       emit()
     }
@@ -267,7 +396,7 @@ window.__ModuleLoader__.load({
 
     function Slider ({ label, value, min, max, step, suffix, onChange }) {
       return h('div', { style: S.field },
-        h('span', { style: S.label }, label + '：' + value + (suffix || '')),
+        h('span', { style: S.label }, label + t('sep') + value + (suffix || '')),
         h('input', {
           type: 'range',
           min,
@@ -301,9 +430,9 @@ window.__ModuleLoader__.load({
     }
 
     function ReportList ({ report }) {
-      if (!report) return h('div', { style: S.empty }, '还没有扫描结果')
+      if (!report) return h('div', { style: S.empty }, t('report.empty'))
       if (!report.sessions || report.sessions.length === 0) {
-        return h('div', { style: S.empty }, '已扫描 ' + report.scanned + ' 个会话，没有发现循环')
+        return h('div', { style: S.empty }, t('report.clean', { count: report.scanned }))
       }
       const projectOf = (p) => (p || '').split(/[\\/]/).filter(Boolean).pop() || ''
       return h('div', { style: S.list },
@@ -311,7 +440,7 @@ window.__ModuleLoader__.load({
           h('div', { style: S.itemHead },
             h('span', { style: S.itemTitle }, s.title || projectOf(s.cwd) || s.id),
             h('span', { style: S.badge }, 'doom ' + (s.doom === undefined ? '—' : s.doom)),
-            h('span', { style: S.badge }, s.collapsedCount + '/' + s.reasoningCount + ' 块')
+            h('span', { style: S.badge }, t('report.blocks', { collapsed: s.collapsedCount, reasoning: s.reasoningCount }))
           ),
           h('div', { style: S.itemMeta }, projectOf(s.cwd) + ' · ' + (s.cwd || '')),
           s.hits && s.hits[0] ? h('div', { style: S.itemDetail }, s.hits[0].detail) : null
@@ -329,9 +458,9 @@ window.__ModuleLoader__.load({
         setMsg(null)
         try {
           await save(patch)
-          setMsg({ text: text || '已保存', bad: false })
+          setMsg({ text: text || t('saved'), bad: false })
         } catch (e) {
-          setMsg({ text: (e && e.message) || '保存失败', bad: true })
+          setMsg({ text: (e && e.message) || t('saveFailed'), bad: true })
         }
       }, [])
 
@@ -339,74 +468,83 @@ window.__ModuleLoader__.load({
         try {
           const r = await fetch(API + '/sound', { method: 'POST' })
           const j = await r.json()
-          setMsg({ text: j.played ? '已播放' : '播放失败', bad: !j.played })
+          setMsg({ text: j.played ? t('sound.played') : t('sound.failed'), bad: !j.played })
         } catch {
-          setMsg({ text: '试听失败', bad: true })
+          setMsg({ text: t('sound.testFailed'), bad: true })
         }
       }, [])
 
-      const presetLabel = { relaxed: '宽松', standard: '普通', sensitive: '敏感' }
-      const interventionLabel = { observe: '只记录', nudge: '提醒', cut: '截断' }
+      const presetLabel = {
+        relaxed: t('level.relaxed'),
+        standard: t('level.standard'),
+        sensitive: t('level.sensitive')
+      }
+      const interventionLabel = {
+        observe: t('action.observe'),
+        nudge: t('action.nudge'),
+        cut: t('action.cut')
+      }
 
       return h('div', { style: S.card },
         h('div', { style: S.head },
-          h('h3', { style: S.title }, '推理死循环防护'),
+          h('h3', { style: S.title }, t('title')),
           h('span', { style: S.badge }, 'v' + (snap.version || '—')),
           h('span', { style: S.status },
-            snap.loading ? '连接中…' : snap.error ? '不可用' : (s.enabled ? '运行中' : '已暂停'))
+            snap.loading ? t('status.connecting') : snap.error ? t('status.unavailable') : (s.enabled ? t('status.running') : t('status.paused'))
+          )
         ),
-        h('p', { style: S.desc }, '检测推理中的重复循环，命中时提醒、截断或响铃。'),
+        h('p', { style: S.desc }, t('desc')),
 
         h('div', { style: S.field },
-          h('span', { style: S.rowTitle }, '防护等级'),
+          h('span', { style: S.rowTitle }, t('level')),
           h(Segmented, {
             value: s.preset || 'standard',
             options: [
-              { value: 'relaxed', label: '宽松' },
-              { value: 'standard', label: '普通' },
-              { value: 'sensitive', label: '敏感' }
+              { value: 'relaxed', label: presetLabel.relaxed },
+              { value: 'standard', label: presetLabel.standard },
+              { value: 'sensitive', label: presetLabel.sensitive }
             ],
-            onChange: (v) => apply({ preset: v }, '防护等级：' + presetLabel[v])
+            onChange: (v) => apply({ preset: v }, t('level.saved', { value: presetLabel[v] }))
           }),
-          h('span', { style: S.hint }, '宽松少打扰，敏感更早介入')
+          h('span', { style: S.hint }, t('level.hint'))
         ),
 
         h('div', { style: S.field },
-          h('span', { style: S.rowTitle }, '命中处理'),
+          h('span', { style: S.rowTitle }, t('action')),
           h(Segmented, {
             value: s.intervention || 'nudge',
             options: [
-              { value: 'observe', label: '只记录' },
-              { value: 'nudge', label: '提醒' },
-              { value: 'cut', label: '截断' }
+              { value: 'observe', label: interventionLabel.observe },
+              { value: 'nudge', label: interventionLabel.nudge },
+              { value: 'cut', label: interventionLabel.cut }
             ],
-            onChange: (v) => apply({ intervention: v }, '命中处理：' + interventionLabel[v])
+            onChange: (v) => apply({ intervention: v }, t('action.saved', { value: interventionLabel[v] }))
           }),
-          h('span', { style: S.hint }, '提醒会注入提示词禁用循环字符,截断会中止当前输出'),
-          h('span', { style: S.hint }, '（截断模式，如果有自动续跑等插件，可能会导致无限循环）')
+          h('span', { style: S.hint }, t('action.hint')),
+          h('span', { style: S.hint }, t('action.warn'))
         ),
 
         h(Slider, {
-          label: '生效门槛',
+          label: t('threshold'),
           value: s.warnAbovePercent || 0,
           min: 0,
           max: 100,
           step: 5,
           suffix: '%',
-          onChange: (v) => apply({ warnAbovePercent: v }, v === 0 ? '全程生效' : v + '% 后生效')
+          onChange: (v) => apply({ warnAbovePercent: v }, v === 0 ? t('threshold.always') : t('threshold.after', { percent: v }))
         }),
 
         h('div', { style: S.row },
           h('div', { style: S.rowText },
-            h('div', { style: S.rowTitle }, '提示音'),
-            h('div', { style: S.hint }, '命中时播放')
+            h('div', { style: S.rowTitle }, t('sound')),
+            h('div', { style: S.hint }, t('sound.hint'))
           ),
           h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
-            h('button', { type: 'button', style: S.link, onClick: testSound }, '试听'),
+            h('button', { type: 'button', style: S.link, onClick: testSound }, t('sound.test')),
             h(Toggle, {
               on: s.soundEnabled !== false,
-              label: '提示音',
-              onChange: (v) => apply({ soundEnabled: v }, v ? '已开启' : '已关闭')
+              label: t('sound'),
+              onChange: (v) => apply({ soundEnabled: v }, v ? t('sound.on') : t('sound.off'))
             })
           )
         ),
@@ -414,31 +552,33 @@ window.__ModuleLoader__.load({
         h('div', { style: S.panel },
           h('div', { style: S.row },
             h('div', { style: S.rowText },
-              h('div', { style: S.rowTitle }, '历史报告'),
+              h('div', { style: S.rowTitle }, t('report')),
               h('div', { style: S.hint },
-                snap.report ? '已扫描 ' + snap.report.scanned + ' 个会话' : '未扫描')
+                snap.report ? t('report.scanned', { count: snap.report.scanned }) : t('report.notScanned'))
             ),
             h('button', {
               type: 'button',
               style: S.link,
               disabled: snap.scanning,
               onClick: () => refreshReport()
-            }, snap.scanning ? '扫描中…' : '扫描')
+            }, snap.scanning ? t('report.scanning') : t('report.scan'))
           ),
           snap.scanError ? h('div', { style: S.msg(true) }, snap.scanError) : null,
           h('div', { style: S.stats },
-            h(Stat, { k: '命中会话', v: snap.report ? String(snap.report.totalCollapsedSessions || 0) : '—' }),
-            h(Stat, { k: '命中条数', v: snap.report ? String(snap.report.totalHits || 0) : '—' }),
-            h(Stat, { k: '最高 doom', v: snap.report ? String(snap.report.maxDoom || 0) : '—' })
+            h(Stat, { k: t('stat.sessions'), v: snap.report ? String(snap.report.totalCollapsedSessions || 0) : '—' }),
+            h(Stat, { k: t('stat.hits'), v: snap.report ? String(snap.report.totalHits || 0) : '—' }),
+            h(Stat, { k: t('stat.maxDoom'), v: snap.report ? String(snap.report.maxDoom || 0) : '—' })
           ),
           h(ReportList, { report: snap.report })
         ),
 
         snap.lastEvent
           ? h('div', { style: S.hint },
-            '最近命中：' + new Date(snap.lastEvent.at).toLocaleTimeString() + ' · '
-            + (snap.lastEvent.kind === 'symbol' ? '符号填充' : '短句循环') + ' · 注入 '
-            + ({ ok: '成功', 'no-agent': '未找到 agent', error: '失败', none: '未触发' }[snap.lastEvent.inject] || '—'))
+            t('lastHit', {
+              time: new Date(snap.lastEvent.at).toLocaleTimeString(),
+              kind: snap.lastEvent.kind === 'symbol' ? t('kind.symbol') : t('kind.phrase'),
+              inject: INJECT_KEY[snap.lastEvent.inject] ? t(INJECT_KEY[snap.lastEvent.inject]) : '—'
+            }))
           : null,
 
         msg ? h('div', { style: S.msg(msg.bad) }, msg.text) : null
@@ -463,9 +603,18 @@ window.__ModuleLoader__.load({
       }
     }
 
-    const inject = ['slots']
+    const inject = ['slots', 'locale']
 
     function apply (ctx) {
+      // 界面文案接入宿主 locale：注册字典后 t 指向 bind(NS)，切换语言即时生效。
+      // 精简组合或测试替身可能没有 locale 服务——判存在后退回内置中文，不让整块 UI 崩掉。
+      if (ctx.locale && typeof ctx.locale.register === 'function' && typeof ctx.locale.bind === 'function') {
+        ctx.effect(() => ctx.locale.register(NS, DICTS), 'doom-loop-dicts')
+        t = ctx.locale.bind(NS)
+      } else {
+        console.warn(LOG, 'locale 服务不可用：界面文案固定中文')
+      }
+
       ctx.effect(() => {
         refreshState()
         const timer = setInterval(() => { if (!document.hidden) refreshState() }, POLL_MS)
@@ -481,7 +630,7 @@ window.__ModuleLoader__.load({
         () => contribute(
           ctx,
           'settings.section',
-          { name: 'settings.section', id: 'doom-loop-guard', order: 245, label: '推理死循环防护' },
+          { name: 'settings.section', id: 'doom-loop-guard', order: 245, locale: NS, label: () => t('nav') },
           SettingsPage,
           'settings.section'
         ),

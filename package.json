@@ -1,6 +1,6 @@
 {
   "name": "dsh-doom-loop-guard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "检测推理中的重复循环（doom loop），命中时提醒、截断或响铃，并生成历史报告。",
   "exports": {
@@ -29,6 +29,7 @@
     },
     "client": {
       "inject": [
+        "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-settings"
       ],
       "platform": "web"

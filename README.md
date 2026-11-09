@@ -37,6 +37,12 @@
 
 阈值由等级决定，也可在 patch 里直接写 `maxDashRun` / `maxParenRun` / `shortSentenceRepeat` / `maxRepeatGap` / `shortRepeatRatio` 覆盖。
 
+## 界面语言
+
+设置页文案有中文与英文两套，跟随 DSH 界面语言（设置 → 常规 → 语言）即时切换，不需重启。插件清单里的名称与描述另由 `locale/zh.json` / `locale/en.json` 提供。
+
+宿主若缺 locale 服务（精简组合），界面退回中文并在控制台留一条 warn。
+
 ## 安装
 
 ```powershell
