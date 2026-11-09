@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Doom Loop Guard",
+    "description": "Detect repetitive reasoning loops and respond with a nudge, a cut, or a chime."
+  }
+}

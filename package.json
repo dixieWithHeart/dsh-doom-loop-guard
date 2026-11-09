@@ -1,0 +1,54 @@
+{
+  "name": "dsh-doom-loop-guard",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "检测推理中的重复循环（doom loop），命中时提醒、截断或响铃，并生成历史报告。",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./icon": "./icon.svg",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "src",
+    "assets",
+    "locale",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web"
+    }
+  },
+  "license": "MIT",
+  "author": "dixie_with_heart (https://github.com/dixieWithHeart)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dixieWithHeart/dsh-doom-loop-guard.git"
+  },
+  "homepage": "https://github.com/dixieWithHeart/dsh-doom-loop-guard#readme",
+  "bugs": {
+    "url": "https://github.com/dixieWithHeart/dsh-doom-loop-guard/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "doom-loop",
+    "guard"
+  ]
+}
