@@ -7,9 +7,9 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-import { DEFAULTS, PRESETS, SETTINGS_FILENAME } from './constants.js'
+import { DEFAULTS, PRESETS, SETTINGS_FILENAME, SOUNDSETS } from './constants.js'
 
-const BOOLEAN_KEYS = ['enabled', 'remindOncePerAttempt', 'autoResume', 'banList', 'soundEnabled']
+const BOOLEAN_KEYS = ['enabled', 'remindOncePerAttempt', 'autoResume', 'banList', 'soundEnabled', 'notifyEnabled']
 const NUMBER_KEYS = {
   warnAbovePercent: { min: 0, max: 100, decimals: 0 },
   soundCooldownMs: { min: 0, max: 600000, decimals: 0 },
@@ -17,7 +17,11 @@ const NUMBER_KEYS = {
   reportLimit: { min: 1, max: 200, decimals: 0 }
 }
 const STRING_KEYS = ['soundPath']
-const ENUM_KEYS = { intervention: ['nudge', 'cut', 'observe'], preset: ['relaxed', 'standard', 'sensitive'] }
+const ENUM_KEYS = {
+  intervention: ['nudge', 'cut', 'observe'],
+  preset: ['relaxed', 'standard', 'sensitive'],
+  soundset: SOUNDSETS
+}
 
 export function settingsPath () {
   const home = process.env.DSH_HOME || join(homedir(), '.dsh')

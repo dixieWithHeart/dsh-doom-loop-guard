@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
   factory: (require) => {
     const React = require('react')
     const h = React.createElement
-    const { useCallback, useEffect, useRef, useState } = React
+    const { useCallback, useEffect, useState } = React
 
     // ═══ 1. 常量 ═══════════════════════════════════════════════════════
     const API = '/api/dsh-doom-loop-guard'
@@ -51,12 +51,23 @@ window.__ModuleLoader__.load({
         'threshold.after': '{percent}% 后生效',
         sound: '提示音',
         'sound.hint': '命中时播放',
-        'sound.test': '试听',
         'sound.on': '已开启',
         'sound.off': '已关闭',
         'sound.played': '已播放',
         'sound.failed': '播放失败',
         'sound.testFailed': '试听失败',
+        soundset: '音色',
+        'soundset.pulse': '双脉冲',
+        'soundset.triple': '三连',
+        'soundset.rise': '急升',
+        'soundset.sting': '刺音',
+        'soundset.ticks': '滴答',
+        'soundset.alarm': '交替',
+        'soundset.saved': '音色：{value}',
+        notify: '系统通知',
+        'notify.hint': '命中时弹一条桌面通知',
+        'notify.on': '通知已开启',
+        'notify.off': '通知已关闭',
         report: '历史报告',
         'report.scanned': '已扫描 {count} 个会话',
         'report.notScanned': '未扫描',
@@ -107,12 +118,23 @@ window.__ModuleLoader__.load({
         'threshold.after': 'Active above {percent}%',
         sound: 'Chime',
         'sound.hint': 'Plays on a hit',
-        'sound.test': 'Preview',
         'sound.on': 'On',
         'sound.off': 'Off',
         'sound.played': 'Played',
         'sound.failed': 'Playback failed',
         'sound.testFailed': 'Preview failed',
+        soundset: 'Sound',
+        'soundset.pulse': 'Pulse',
+        'soundset.triple': 'Triple',
+        'soundset.rise': 'Rise',
+        'soundset.sting': 'Sting',
+        'soundset.ticks': 'Ticks',
+        'soundset.alarm': 'Alarm',
+        'soundset.saved': 'Sound: {value}',
+        notify: 'Desktop notification',
+        'notify.hint': 'Shows a desktop notification on a hit',
+        'notify.on': 'Notifications on',
+        'notify.off': 'Notifications off',
         report: 'History report',
         'report.scanned': 'Scanned {count} sessions',
         'report.notScanned': 'Not scanned',
@@ -142,6 +164,9 @@ window.__ModuleLoader__.load({
     /** lastEvent.inject 取值 → 字典键（未知值仍渲染破折号，保持原行为）。 */
     const INJECT_KEY = { ok: 'inject.ok', 'no-agent': 'inject.noAgent', error: 'inject.error', none: 'inject.none' }
 
+    /** 内置音色（与宿主 src/constants.js 的 SOUNDSETS 保持一致）。 */
+    const SOUNDSETS = ['pulse', 'triple', 'rise', 'sting', 'ticks', 'alarm']
+
     /** 占位符替换，语义与宿主 locale 的 translate 一致（`{name}` → params.name）。 */
     function fill (template, params) {      if (!params) return template
       return template.replace(/\{(\w+)\}/g, (m, name) => (name in params ? String(params[name]) : m))
@@ -160,13 +185,15 @@ window.__ModuleLoader__.load({
       maxRepeatGap: 8,
       shortRepeatRatio: 0.05,
       windowChars: 4000,
-      warnAbovePercent: 0,
+      warnAbovePercent: 50,
       pressureBoostMax: 0.6,
       intervention: 'nudge',
       autoResume: true,
       maxConsecutiveCuts: 3,
       banList: true,
       soundEnabled: true,
+      notifyEnabled: true,
+      soundset: 'rise',
       soundCooldownMs: 5000,
       soundPath: '',
       reportDays: 7,
@@ -246,45 +273,179 @@ window.__ModuleLoader__.load({
     }
 
     // ═══ 3. 样式（只用主题 token，全部带 fallback）══════════════════════
+    // @ui-kit v1.3.0  共享 UI 基座（源：plugins/_shared/ui-kit.js；改源后重新复制本段）
+    // ═════════════════════════════ [C] 颜色 token ═════════════════════════
     const C = {
       border: 'var(--dsw-alias-border-subtle, rgba(130,130,140,0.28))',
       text: 'var(--dsw-alias-text-primary, inherit)',
       dim: 'var(--dsw-alias-text-secondary, rgba(140,140,150,1))',
       accent: 'var(--dsw-alias-accent, #4f7cff)',
-      danger: 'var(--dsw-alias-state-danger, #d9534f)',
       surface: 'var(--dsw-alias-surface-raised, rgba(130,130,140,0.06))',
+      ok: 'var(--dsw-alias-success, #2f9e6b)',
+      warn: 'var(--dsw-alias-warning, #c8862a)',
+      danger: 'var(--dsw-alias-danger, #e5534b)',
       radius: 'var(--dsw-radius-lg, 12px)',
       radiusSm: 'var(--dsw-radius-sm, 8px)',
-      mono: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+      mono: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
     }
 
-    const S = {
+    // ═════════════════════════ [S_BASE] 通用样式 ═════════════════════════
+    // 插件用 `{ ...S_BASE, ...特有键 }` 组装自己的 S，特有键不要回填本文件。
+    const S_BASE = {
       card: { border: '1px solid ' + C.border, borderRadius: C.radius, padding: '16px 18px', display: 'grid', gap: '14px', color: C.text },
       head: { display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' },
       title: { fontSize: '15px', fontWeight: 600, margin: 0 },
       badge: { fontSize: '12px', color: C.dim, border: '1px solid ' + C.border, borderRadius: '999px', padding: '1px 8px' },
       status: { marginLeft: 'auto', fontSize: '12px', color: C.dim },
       desc: { margin: 0, fontSize: '13px', lineHeight: 1.6, color: C.dim },
-      panel: { background: C.surface, borderRadius: C.radiusSm, padding: '12px 14px', display: 'grid', gap: '10px' },
-      label: { fontSize: '12px', color: C.dim, display: 'flex', alignItems: 'center', gap: '6px' },
-      input: {
-        fontFamily: C.mono,
-        fontSize: '12.5px',
-        lineHeight: 1.6,
-        padding: '7px 9px',
-        border: '1px solid ' + C.border,
-        borderRadius: '6px',
-        background: 'transparent',
-        color: C.text,
-        width: '100%',
-        boxSizing: 'border-box'
-      },
-      row: { display: 'flex', alignItems: 'flex-start', gap: '14px', justifyContent: 'space-between', flexWrap: 'wrap' },
-      rowText: { display: 'grid', gap: '3px', flex: '1 1 220px', minWidth: 180 },
-      rowTitle: { fontSize: '13.5px', fontWeight: 500 },
+      /* 行布局自适应：空间不够时控件整体换到下一行，而不是把标题挤成一字一列 */
+      row: { display: 'flex', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' },
+      rowText: { display: 'grid', gap: '2px', flex: '1 1 200px', minWidth: '180px' },
+      rowTitle: { fontSize: '13px', fontWeight: 550 },
+      rowDesc: { fontSize: '12px', color: C.dim, lineHeight: 1.5 },
+      field: { display: 'grid', gap: '4px' },
+      label: { fontSize: '12px', color: C.dim },
       hint: { fontSize: '12px', color: C.dim, lineHeight: 1.5 },
-      foot: { margin: 0, fontSize: '12px', color: C.dim, lineHeight: 1.6 },
+      inline: { display: 'flex', alignItems: 'center', gap: '8px', flex: '0 1 auto', flexWrap: 'wrap', justifyContent: 'flex-end' },
+      toggle: (on) => ({
+        width: '38px', height: '22px', borderRadius: '999px', border: '1px solid ' + C.border,
+        background: on ? C.accent : 'rgba(130,130,140,0.25)', position: 'relative', cursor: 'pointer',
+        flex: 'none', marginTop: '2px', transition: 'background 160ms ease',
+      }),
+      knob: (on) => ({
+        position: 'absolute', top: '2px', left: on ? '18px' : '2px', width: '16px', height: '16px',
+        borderRadius: '50%', background: '#fff', transition: 'left 160ms ease',
+      }),
+      chip: (on) => ({
+        padding: '3px 10px', fontSize: '12px', borderRadius: '999px', cursor: 'pointer',
+        border: '1px solid ' + (on ? C.accent : C.border),
+        background: on ? C.accent : 'transparent',
+        color: on ? '#fff' : C.dim,
+      }),
+      chips: { display: 'flex', gap: '6px', flexWrap: 'wrap', minWidth: 0 },
+      panel: { background: C.surface, borderRadius: C.radiusSm, padding: '12px 14px', display: 'grid', gap: '10px' },
+      input: {
+        width: '110px', padding: '5px 8px', fontSize: '13px', textAlign: 'right',
+        border: '1px solid ' + C.border, borderRadius: C.radiusSm, background: 'transparent', color: C.text,
+      },
+      textarea: {
+        fontFamily: C.mono, fontSize: '12.5px', lineHeight: 1.6, padding: '8px 10px',
+        resize: 'vertical', border: '1px solid ' + C.border, borderRadius: '6px',
+        background: 'transparent', color: C.text, minHeight: '56px', width: '100%', boxSizing: 'border-box',
+      },
+      /* 文本输入：与 textarea 同族的全宽、等宽、左对齐；行内需要伸缩时在使用处加 flex */
+      textInput: {
+        width: '100%', boxSizing: 'border-box',
+        fontFamily: C.mono, fontSize: '12.5px', lineHeight: 1.6, padding: '7px 9px',
+        border: '1px solid ' + C.border, borderRadius: '6px',
+        background: 'transparent', color: C.text,
+      },
+      btn: (disabled) => ({
+        padding: '5px 12px', fontSize: '13px', borderRadius: C.radiusSm,
+        border: '1px solid ' + C.border, background: 'transparent', color: C.text,
+        cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1, flex: 'none',
+      }),
+      link: { fontSize: '13px', padding: '5px 12px', borderRadius: C.radiusSm, border: '1px solid ' + C.border, background: 'transparent', color: C.text, cursor: 'pointer' },
+      line: {
+        fontFamily: C.mono, fontSize: '12.5px', lineHeight: 1.6, wordBreak: 'break-all',
+        background: 'rgba(130,130,140,0.12)', borderRadius: '6px', padding: '8px 10px', color: C.text,
+      },
       empty: { fontSize: '12.5px', color: C.dim, fontStyle: 'italic' },
+      msg: (bad) => ({ fontSize: '12px', color: bad ? C.danger : C.dim }),
+      foot: { fontSize: '12px', color: C.dim, lineHeight: 1.6, margin: 0 },
+      mono: { fontFamily: C.mono, wordBreak: 'break-all' },
+      statItem: { display: 'grid', gap: '2px' },
+      statValue: { fontSize: '18px', fontWeight: 600 },
+      statKey: { fontSize: '12px', color: C.dim },
+      range: { width: '100%', accentColor: C.accent, cursor: 'pointer' },
+      sliderHead: { display: 'flex', alignItems: 'baseline', gap: '8px', justifyContent: 'space-between' },
+      sliderValue: { fontSize: '13px', fontWeight: 600, fontFamily: C.mono },
+    }
+
+    // ═════════════════════════ [组件] 通用控件 ═════════════════════════
+    /** 开关按钮。 */
+    function Toggle ({ on, label, onChange }) {
+      return h('button', {
+        type: 'button',
+        'aria-label': label,
+        'aria-pressed': on ? 'true' : 'false',
+        style: S.toggle(on),
+        onClick: () => onChange(!on),
+      }, h('span', { style: S.knob(on) }))
+    }
+
+    /** 一行设置：左标题与说明，右控件。 */
+    function Row ({ title, desc, control }) {
+      return h('div', { style: S.row },
+        h('div', { style: S.rowText },
+          h('div', { style: S.rowTitle }, title),
+          desc ? h('div', { style: S.rowDesc }, desc) : null,
+        ),
+        control,
+      )
+    }
+
+    /** 一行文本：有值显示内容，无值显示占位说明。 */
+    function Line ({ text, placeholder }) {
+      return text
+        ? h('div', { style: S.line }, text)
+        : h('div', { style: S.empty }, placeholder)
+    }
+
+    /** 标签 + 值（值默认等宽）。 */
+    function Field ({ label, value, mono }) {
+      return h('div', { style: S.field },
+        h('span', { style: S.label }, label),
+        h('span', { style: mono === false ? { fontSize: '12.5px' } : { fontFamily: C.mono, fontSize: '12.5px' } }, value),
+      )
+    }
+
+    /** 百分比滑条。valueText 传当前值的可读形式（如 "30%"），不传则只显示标签。 */
+    function Slider ({ label, value, min, max, step, hint, valueText, disabled, onChange }) {
+      return h('div', { style: S.field },
+        h('div', { style: S.sliderHead },
+          h('span', { style: S.rowTitle }, label),
+          valueText ? h('span', { style: S.sliderValue }, valueText) : null,
+        ),
+        h('input', {
+          type: 'range',
+          min,
+          max,
+          step,
+          value: Number(value) || 0,
+          style: S.range,
+          'aria-label': label,
+          disabled,
+          onChange: (e) => onChange(Number(e.target.value)),
+        }),
+        hint ? h('span', { style: S.hint }, hint) : null,
+      )
+    }
+
+    /** 数据卡片：一个数值 + 一句说明。 */
+    function Stat ({ value, label }) {
+      return h('div', { style: S.statItem },
+        h('div', { style: S.statValue }, value),
+        h('div', { style: S.statKey }, label),
+      )
+    }
+
+    /** 互斥选项组（药丸按钮）。options 为 `[[value, label], ...]`。 */
+    function ChipGroup ({ value, options, disabled, onChange }) {
+      return h('div', { style: S.chips },
+        options.map(([key, label]) => h('button', {
+          key,
+          type: 'button',
+          style: S.chip(value === key),
+          'aria-pressed': value === key ? 'true' : 'false',
+          disabled,
+          onClick: () => onChange(key, label),
+        }, label))
+      )
+    }
+    // 模板优先：通用键全部来自 S_BASE，这里只放本插件特有的结构样式。
+    const S = {
+      ...S_BASE,
       list: { display: 'grid', gap: '8px', maxHeight: '280px', overflowY: 'auto', paddingRight: '4px' },
       item: {
         display: 'grid',
@@ -298,137 +459,10 @@ window.__ModuleLoader__.load({
       itemTitle: { fontSize: '13px', fontWeight: 500, fontFamily: C.mono, wordBreak: 'break-all', minWidth: 0 },
       itemMeta: { fontSize: '12px', color: C.dim, wordBreak: 'break-all' },
       itemDetail: { fontSize: '12px', color: C.dim, lineHeight: 1.5 },
-      trendLine: { display: 'flex', gap: '10px', overflowX: 'auto', whiteSpace: 'nowrap', fontSize: '12px', color: C.dim, paddingBottom: '2px' },
-      trendItem: { flex: '0 0 auto', fontFamily: C.mono },
-      grid: { display: 'grid', gap: '10px', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' },
-      field: { display: 'grid', gap: '4px' },
-      btn: (disabled) => ({
-        fontSize: '12.5px',
-        padding: '6px 14px',
-        borderRadius: '6px',
-        border: '1px solid ' + C.border,
-        background: disabled ? 'transparent' : C.accent,
-        color: disabled ? C.dim : '#fff',
-        cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.6 : 1
-      }),
-      link: {
-        fontSize: '12.5px',
-        padding: '6px 14px',
-        borderRadius: '6px',
-        border: '1px solid ' + C.border,
-        background: 'transparent',
-        color: C.text,
-        cursor: 'pointer'
-      },
-      msg: (bad) => ({ fontSize: '12.5px', color: bad ? C.danger : C.dim }),
       stats: { display: 'flex', gap: '18px', flexWrap: 'wrap' },
-      statItem: { display: 'grid', gap: '2px' },
-      statValue: { fontSize: '18px', fontWeight: 600 },
-      statKey: { fontSize: '12px', color: C.dim }
     }
 
     // ═══ 4. 小组件 ═════════════════════════════════════════════════════
-    function Toggle ({ on, label, onChange }) {
-      return h('button', {
-        type: 'button',
-        role: 'switch',
-        'aria-checked': on ? 'true' : 'false',
-        'aria-label': label,
-        onClick: () => onChange(!on),
-        style: {
-          width: '44px',
-          height: '24px',
-          borderRadius: '999px',
-          border: '1px solid ' + C.border,
-          background: on ? C.accent : 'transparent',
-          position: 'relative',
-          cursor: 'pointer',
-          padding: 0,
-          flex: '0 0 auto'
-        }
-      }, h('span', {
-        style: {
-          position: 'absolute',
-          top: '2px',
-          left: on ? '22px' : '2px',
-          width: '18px',
-          height: '18px',
-          borderRadius: '50%',
-          background: on ? '#fff' : C.dim,
-          transition: 'left 120ms ease'
-        }
-      }))
-    }
-
-    function Stat ({ k, v }) {
-      return h('div', { style: S.statItem },
-        h('div', { style: S.statValue }, v),
-        h('div', { style: S.statKey }, k)
-      )
-    }
-
-    function NumberField ({ label, value, min, max, step, onCommit }) {
-      const [draft, setDraft] = useState(String(value))
-      const dirty = useRef(false)
-      useEffect(() => {
-        if (!dirty.current) setDraft(String(value))
-      }, [value])
-      return h('label', { style: S.field },
-        h('span', { style: S.label }, label),
-        h('input', {
-          type: 'number',
-          min,
-          max,
-          step: step || 1,
-          style: S.input,
-          value: draft,
-          onChange: (e) => { dirty.current = true; setDraft(e.target.value) },
-          onBlur: () => {
-            const n = Number(draft)
-            if (!Number.isFinite(n)) { setDraft(String(value)); dirty.current = false; return }
-            dirty.current = false
-            onCommit(n)
-          }
-        })
-      )
-    }
-
-    function Slider ({ label, value, min, max, step, suffix, onChange }) {
-      return h('div', { style: S.field },
-        h('span', { style: S.label }, label + t('sep') + value + (suffix || '')),
-        h('input', {
-          type: 'range',
-          min,
-          max,
-          step: step || 1,
-          value: Number(value) || 0,
-          'aria-label': label,
-          style: { width: '100%', accentColor: C.accent, cursor: 'pointer' },
-          onChange: (e) => onChange(Number(e.target.value))
-        })
-      )
-    }
-
-    function Segmented ({ value, options, onChange }) {
-      return h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
-        options.map((opt) => h('button', {
-          key: opt.value,
-          type: 'button',
-          onClick: () => onChange(opt.value),
-          style: {
-            fontSize: '12.5px',
-            padding: '5px 12px',
-            borderRadius: '6px',
-            border: '1px solid ' + C.border,
-            background: value === opt.value ? C.accent : 'transparent',
-            color: value === opt.value ? '#fff' : C.text,
-            cursor: 'pointer'
-          }
-        }, opt.label))
-      )
-    }
-
     function ReportList ({ report }) {
       if (!report) return h('div', { style: S.empty }, t('report.empty'))
       if (!report.sessions || report.sessions.length === 0) {
@@ -464,9 +498,13 @@ window.__ModuleLoader__.load({
         }
       }, [])
 
-      const testSound = useCallback(async () => {
+      const testSound = useCallback(async (soundset) => {
         try {
-          const r = await fetch(API + '/sound', { method: 'POST' })
+          const r = await fetch(API + '/sound', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(soundset ? { soundset } : {})
+          })
           const j = await r.json()
           setMsg({ text: j.played ? t('sound.played') : t('sound.failed'), bad: !j.played })
         } catch {
@@ -497,28 +535,28 @@ window.__ModuleLoader__.load({
 
         h('div', { style: S.field },
           h('span', { style: S.rowTitle }, t('level')),
-          h(Segmented, {
+          h(ChipGroup, {
             value: s.preset || 'standard',
             options: [
-              { value: 'relaxed', label: presetLabel.relaxed },
-              { value: 'standard', label: presetLabel.standard },
-              { value: 'sensitive', label: presetLabel.sensitive }
+              ['relaxed', presetLabel.relaxed],
+              ['standard', presetLabel.standard],
+              ['sensitive', presetLabel.sensitive]
             ],
-            onChange: (v) => apply({ preset: v }, t('level.saved', { value: presetLabel[v] }))
+            onChange: (v, label) => apply({ preset: v }, t('level.saved', { value: label }))
           }),
           h('span', { style: S.hint }, t('level.hint'))
         ),
 
         h('div', { style: S.field },
           h('span', { style: S.rowTitle }, t('action')),
-          h(Segmented, {
+          h(ChipGroup, {
             value: s.intervention || 'nudge',
             options: [
-              { value: 'observe', label: interventionLabel.observe },
-              { value: 'nudge', label: interventionLabel.nudge },
-              { value: 'cut', label: interventionLabel.cut }
+              ['observe', interventionLabel.observe],
+              ['nudge', interventionLabel.nudge],
+              ['cut', interventionLabel.cut]
             ],
-            onChange: (v) => apply({ intervention: v }, t('action.saved', { value: interventionLabel[v] }))
+            onChange: (v, label) => apply({ intervention: v }, t('action.saved', { value: label }))
           }),
           h('span', { style: S.hint }, t('action.hint')),
           h('span', { style: S.hint }, t('action.warn'))
@@ -527,47 +565,61 @@ window.__ModuleLoader__.load({
         h(Slider, {
           label: t('threshold'),
           value: s.warnAbovePercent || 0,
+          valueText: (s.warnAbovePercent || 0) + '%',
           min: 0,
           max: 100,
           step: 5,
-          suffix: '%',
           onChange: (v) => apply({ warnAbovePercent: v }, v === 0 ? t('threshold.always') : t('threshold.after', { percent: v }))
         }),
 
-        h('div', { style: S.row },
-          h('div', { style: S.rowText },
-            h('div', { style: S.rowTitle }, t('sound')),
-            h('div', { style: S.hint }, t('sound.hint'))
-          ),
-          h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
-            h('button', { type: 'button', style: S.link, onClick: testSound }, t('sound.test')),
-            h(Toggle, {
-              on: s.soundEnabled !== false,
-              label: t('sound'),
-              onChange: (v) => apply({ soundEnabled: v }, v ? t('sound.on') : t('sound.off'))
-            })
-          )
+        h(Row, {
+          title: t('sound'),
+          desc: t('sound.hint'),
+          control: h(Toggle, {
+            on: s.soundEnabled !== false,
+            label: t('sound'),
+            onChange: (v) => apply({ soundEnabled: v }, v ? t('sound.on') : t('sound.off'))
+          })
+        }),
+
+        h('div', { style: S.field },
+          h('span', { style: S.rowTitle }, t('soundset')),
+          h(ChipGroup, {
+            value: s.soundset || 'rise',
+            options: SOUNDSETS.map((id) => [id, t('soundset.' + id)]),
+            onChange: (value, label) => {
+              apply({ soundset: value }, t('soundset.saved', { value: label }))
+              testSound(value)
+            }
+          })
         ),
 
+        h(Row, {
+          title: t('notify'),
+          desc: t('notify.hint'),
+          control: h(Toggle, {
+            on: s.notifyEnabled !== false,
+            label: t('notify'),
+            onChange: (v) => apply({ notifyEnabled: v }, v ? t('notify.on') : t('notify.off'))
+          })
+        }),
+
         h('div', { style: S.panel },
-          h('div', { style: S.row },
-            h('div', { style: S.rowText },
-              h('div', { style: S.rowTitle }, t('report')),
-              h('div', { style: S.hint },
-                snap.report ? t('report.scanned', { count: snap.report.scanned }) : t('report.notScanned'))
-            ),
-            h('button', {
+          h(Row, {
+            title: t('report'),
+            desc: snap.report ? t('report.scanned', { count: snap.report.scanned }) : t('report.notScanned'),
+            control: h('button', {
               type: 'button',
               style: S.link,
               disabled: snap.scanning,
               onClick: () => refreshReport()
             }, snap.scanning ? t('report.scanning') : t('report.scan'))
-          ),
+          }),
           snap.scanError ? h('div', { style: S.msg(true) }, snap.scanError) : null,
           h('div', { style: S.stats },
-            h(Stat, { k: t('stat.sessions'), v: snap.report ? String(snap.report.totalCollapsedSessions || 0) : '—' }),
-            h(Stat, { k: t('stat.hits'), v: snap.report ? String(snap.report.totalHits || 0) : '—' }),
-            h(Stat, { k: t('stat.maxDoom'), v: snap.report ? String(snap.report.maxDoom || 0) : '—' })
+            h(Stat, { label: t('stat.sessions'), value: snap.report ? String(snap.report.totalCollapsedSessions || 0) : '—' }),
+            h(Stat, { label: t('stat.hits'), value: snap.report ? String(snap.report.totalHits || 0) : '—' }),
+            h(Stat, { label: t('stat.maxDoom'), value: snap.report ? String(snap.report.maxDoom || 0) : '—' })
           ),
           h(ReportList, { report: snap.report })
         ),

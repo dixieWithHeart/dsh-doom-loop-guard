@@ -13,15 +13,19 @@
         # 命中处置：observe / nudge / cut
         intervention: nudge
         # 生效门槛（上下文占用 %），0 为全程
-        warnAbovePercent: 0
+        warnAbovePercent: 50
         # cut 后自动续跑
         autoResume: true
         # 连续截断上限
         maxConsecutiveCuts: 3
         # 提示音
         soundEnabled: true
+        # 系统通知（命中时弹桌面通知）
+        notifyEnabled: true
         soundCooldownMs: 5000
-        # 自定义音频路径，留空用内置
+        # 内置音色：pulse / triple / rise / sting / ticks / alarm（设置页可切换试听）
+        soundset: rise
+        # 自定义音频路径，留空用内置音色
         soundPath: ''
         # 历史扫描范围
         reportDays: 7

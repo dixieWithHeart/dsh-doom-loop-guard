@@ -2,7 +2,7 @@
  * 配置契约的单一来源。所有可调值都能在 cordis.patch.yml 里覆盖，用户的 patch 层随升级保留。
  */
 
-export const VERSION = '1.0.0'
+export const VERSION = '1.3.0'
 
 /** 插件在会话事件、注入消息、HTTP 路由里使用的统一前缀。 */
 export const PLUGIN_ID = 'dsh-doom-loop-guard'
@@ -29,6 +29,9 @@ export const PRESETS = {
   sensitive: { maxDashRun: 500, maxParenRun: 120, shortSentenceRepeat: 10, maxRepeatGap: 12, shortRepeatRatio: 0.03 }
 }
 
+/** 内置提示音（`assets/<name>.wav`）。风格统一为短、快、急、促，全部由 `tools/make_alerts.py` 合成。 */
+export const SOUNDSETS = ['pulse', 'triple', 'rise', 'sting', 'ticks', 'alarm']
+
 /** 默认阈值与运行参数。 */
 export const DEFAULTS = {
   /** 防护等级：relaxed / standard / sensitive。 */
@@ -43,6 +46,8 @@ export const DEFAULTS = {
   weakDashRun: 300,
   /** 中信号：括号嵌套下限，只进报告。 */
   weakParenRun: 60,
+  /** 中信号：连续同一感叹号/问号的数量下限，只进报告（不响铃、不注入）。 */
+  weakPunctRun: 20,
   /** 检测窗口内同一短句至少重复几次。 */
   shortSentenceRepeat: 15,
   /** 同一短句相邻两次出现允许的最大字符距离：卡死循环只有几个字符，列表推进则隔着一整段正文。 */
@@ -54,7 +59,7 @@ export const DEFAULTS = {
   /** 同一 attempt 内每类形态最多提醒一次。 */
   remindOncePerAttempt: true,
   /** 预警门槛：上下文占用达到该百分比后才开始检测与提醒；0 表示全程预警。同时作为阈值收紧的起点。 */
-  warnAbovePercent: 0,
+  warnAbovePercent: 50,
   /** 占用从门槛升到 100% 时的最大收紧比例（0.6 表示阈值最多降到原来的 1/1.6）。 */
   pressureBoostMax: 0.6,
   /** 命中后的处置方式：nudge 注入提醒 / cut 主动截断 / observe 只记录。 */
@@ -67,9 +72,13 @@ export const DEFAULTS = {
   banList: true,
   /** 命中时播放提示音。 */
   soundEnabled: true,
+  /** 命中时弹系统通知（Windows Toast / macOS / Linux）。 */
+  notifyEnabled: true,
   /** 两次播放的最小间隔（毫秒），避免连续命中叠音。 */
   soundCooldownMs: 5000,
-  /** 自定义音频路径；留空用插件内置的 loop-alert.mp3。 */
+  /** 内置提示音：SOUNDSETS 之一。默认 rise（急升），短快急促、辨识度最高。 */
+  soundset: 'rise',
+  /** 自定义音频路径；非空且文件存在时优先于 soundset。 */
   soundPath: '',
   /** 提醒文本。占位符 {kind} {detail}。 */
   reminderText: '【Doom Loop Guard】检测到输出在原地重复：{detail}。请立即停止重复，按顺序做三件事：1）一句话复述当前要解决的问题；2）列出已确认的事实；3）给出下一步单一行动，或向用户提问。不要再展开新的分支。',

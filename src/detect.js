@@ -7,7 +7,7 @@
  *
  * 分两档输出：
  *   high  强信号（破折号 ≥800 / 括号 ≥200 / 短句高频+极短间隔）—— 实时预警只认这一档
- *   low   中信号（破折号 300-800 / 括号 60-200）—— 多为格式碎片化而非真循环，只进报告
+ *   low   中信号（破折号 300-800 / 括号 60-200 / 连续标点 ≥weakPunctRun）—— 多为格式碎片或标点刷屏，只进报告
  *
  * 依据：阴性样本里破折号 300-800 的多为技术描述中的插入语，
  * 而真循环的破折号是 1197-12144 字符的连续填充。
@@ -17,6 +17,8 @@
 const DASH_RUN = /(?:——\*{0,2}\s*){3,}/g
 /** 连续左括号嵌套：`（（（（`。 */
 const PAREN_RUN = /（{4,}/g
+/** 连续同一标点（感叹号 / 问号）刷屏：`!!!!`、`？？？`。只作弱信号，阈值见 weakPunctRun。 */
+const PUNCT_RUN = /([!！?？])\1+/g
 /** 句子切分。 */
 const SENT_SPLIT = /[。！？!?；;\n]+/
 /** 视为“无信息短句”的长度范围。单字中文也计入（"好。执行。" 是典型空转）。 */
@@ -92,6 +94,8 @@ export function measure (text) {
     chars: src.length,
     maxDashRun: 0,
     maxParenRun: 0,
+    maxPunctRun: 0,
+    punctChar: '',
     worstSentence: '',
     worstCount: 0,
     repeatedShortChars: 0,
@@ -105,6 +109,12 @@ export function measure (text) {
   }
   for (const m of src.matchAll(PAREN_RUN)) {
     if (m[0].length > stats.maxParenRun) stats.maxParenRun = m[0].length
+  }
+  for (const m of src.matchAll(PUNCT_RUN)) {
+    if (m[0].length > stats.maxPunctRun) {
+      stats.maxPunctRun = m[0].length
+      stats.punctChar = m[1]
+    }
   }
 
   let best = { ratio: 0, worstCount: 0, worstSentence: '', repeated: 0, minGap: 0 }
@@ -138,6 +148,7 @@ export function detect (text, limits) {
   const parenHigh = Number(limits?.maxParenRun) || 0
   const dashLow = Number(limits?.weakDashRun) || 0
   const parenLow = Number(limits?.weakParenRun) || 0
+  const punctLow = Number(limits?.weakPunctRun) || 0
   const minCount = Number(limits?.shortSentenceRepeat) || 0
   const maxGap = Number(limits?.maxRepeatGap) || 0
   const ratio = Number(limits?.shortRepeatRatio) || 0
@@ -191,6 +202,16 @@ export function detect (text, limits) {
       confidence: 'low',
       kind: 'symbol',
       detail: `括号嵌套 ${stats.maxParenRun} 字符（疑似，未达强阈值 ${parenHigh}）`
+    }
+  }
+  // 中信号：标点刷屏（感叹号 / 问号连打）。只有长度、没有语义，单独成一类，不参与实时提醒。
+  if (punctLow > 0 && stats.maxPunctRun >= punctLow) {
+    return {
+      ...findings,
+      collapsed: true,
+      confidence: 'low',
+      kind: 'punct',
+      detail: `连续「${stats.punctChar}」${stats.maxPunctRun} 个（疑似标点刷屏，阈值 ${punctLow}）`
     }
   }
   return findings

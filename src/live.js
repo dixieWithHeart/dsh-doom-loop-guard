@@ -57,7 +57,7 @@ function cutText (options, finding, cut) {
  * @param {object} [projections] 会话投影服务（缺省时不读上下文占用）
  * @returns {() => void} 卸载函数
  */
-export function attachLive (ctx, getOptions, log, projections, sound, sink) {
+export function attachLive (ctx, getOptions, log, projections, sound, sink, notifier) {
   const states = new WeakMap()
   const events = sink && Array.isArray(sink.events) ? sink.events : []
   const record = (entry) => {
@@ -170,6 +170,15 @@ export function attachLive (ctx, getOptions, log, projections, sound, sink) {
               sound.play(settings)
             } catch (error) {
               log.warn(`sound failed: ${error instanceof Error ? error.message : String(error)}`)
+            }
+          }
+          if (notifier) {
+            try {
+              const kindLabel = hit.kind === 'symbol' ? '符号填充' : '短句循环'
+              const modeLabel = mode === 'observe' ? '仅记录' : mode === 'cut' ? '已截断' : '已注入提醒'
+              notifier.notify(settings, { title: '推理死循环', body: `${kindLabel} · ${modeLabel}` })
+            } catch (error) {
+              log.warn(`notify failed: ${error instanceof Error ? error.message : String(error)}`)
             }
           }
 

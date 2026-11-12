@@ -11,8 +11,10 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-/** 插件内置音频（随包分发）。 */
-const ASSET = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'assets', 'loop-alert.mp3')
+/** 插件内置音频目录（随包分发）。 */
+const ASSET_DIR = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'assets')
+/** 旧版默认音频：只在 soundset 无效时兜底，新用户听不到它。 */
+const LEGACY_ASSET = join(ASSET_DIR, 'loop-alert.mp3')
 
 function quotePowerShell (text) {
   return `'${String(text).replace(/'/g, "''")}'`
@@ -34,11 +36,20 @@ function mediaPlayerScript (file) {
   ].join(';')
 }
 
-/** 解析音频路径：配置了外部路径且存在就用它，否则用内置资源。 */
+/** 内置音色名 → 文件；只接受安全字符，挡住 `..` 之类的路径穿越。 */
+function soundsetPath (name) {
+  if (typeof name !== 'string' || !/^[a-z0-9-]+$/.test(name)) return null
+  const file = join(ASSET_DIR, `${name}.wav`)
+  return existsSync(file) ? file : null
+}
+
+/** 解析音频路径：自定义路径 → 内置音色 → 旧版兜底。 */
 export function resolveSoundPath (options) {
   const custom = options && typeof options.soundPath === 'string' ? options.soundPath.trim() : ''
   if (custom && existsSync(custom)) return custom
-  return existsSync(ASSET) ? ASSET : null
+  const builtin = soundsetPath(options && options.soundset)
+  if (builtin) return builtin
+  return existsSync(LEGACY_ASSET) ? LEGACY_ASSET : null
 }
 
 /** 冷却判定：距离上次播放不足 cooldownMs 就不再播。 */
@@ -106,5 +117,5 @@ export function createSoundPlayer (log, deps = {}) {
     children.clear()
   }
 
-  return { play, dispose, lastPlayedAt: () => lastPlayed, assetPath: ASSET }
+  return { play, dispose, lastPlayedAt: () => lastPlayed, assetPath: LEGACY_ASSET }
 }

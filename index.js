@@ -16,6 +16,7 @@
 
 import { VERSION } from './src/constants.js'
 import { attachLive } from './src/live.js'
+import { createNotifier } from './src/notify.js'
 import { createPressureProjection } from './src/pressure.js'
 import { createRoutes } from './src/routes.js'
 import { loadSettings, resolveOptions, saveSettings, settingsPath } from './src/settings.js'
@@ -43,9 +44,10 @@ export function apply (ctx, config) {
 
   // ── 实时预警与音效 ──────────────────────────────────────────────────────
   const sound = createSoundPlayer(log)
+  const notifier = createNotifier(log)
   const sink = { events: [] }
-  ctx.effect(() => () => sound.dispose())
-  ctx.effect(() => attachLive(ctx, () => options, log, projections, sound, sink))
+  ctx.effect(() => () => { sound.dispose(); notifier.dispose() })
+  ctx.effect(() => attachLive(ctx, () => options, log, projections, sound, sink, notifier))
 
   // ── 工具 ────────────────────────────────────────────────────────────────
   if (!ctx.tools || typeof ctx.tools.register !== 'function') {
@@ -77,7 +79,13 @@ export function apply (ctx, config) {
           getOptions: () => options,
           setOptions: (next) => { options = next },
           persist: (next) => saveSettings(log, next),
-          playSound: () => sound.play({ ...options, soundCooldownMs: 0 }),
+          playSound: (extra) => sound.play({
+            ...options,
+            ...(extra || {}),
+            // 试听指定音色时必须绕过自定义路径，否则点哪个音色都会播用户自定义文件
+            soundPath: extra && extra.soundset ? '' : options.soundPath,
+            soundCooldownMs: 0
+          }),
           getEvents: () => sink.events,
           log
         })

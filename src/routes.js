@@ -27,9 +27,18 @@ export function createRoutes ({ getOptions, setOptions, persist, playSound, getE
       path: `${ROUTE_PREFIX}/sound`,
       handler: async (req, res) => {
         if (req.method !== 'POST') { res.writeHead(405); res.end(); return }
+        // 可选 body：{ soundset } —— 设置页试听指定音色，不传则用当前设置。
+        let payload = null
+        try {
+          const raw = await readBody(req)
+          payload = raw ? JSON.parse(raw) : null
+        } catch { payload = null }
+        const soundset = payload && typeof payload.soundset === 'string' ? payload.soundset : ''
         let played = false
         try {
-          played = typeof playSound === 'function' ? Boolean(playSound()) : false
+          played = typeof playSound === 'function'
+            ? Boolean(playSound(soundset ? { soundset } : undefined))
+            : false
         } catch (error) {
           log.warn(`sound route failed: ${error instanceof Error ? error.message : String(error)}`)
         }
