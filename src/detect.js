@@ -249,7 +249,7 @@ export function cutIndex (text, finding, from = 0) {
 
   const sentence = stats.worstSentence
   if (!sentence) return Math.max(start, src.length - 200)
-  let pos = sub.indexOf(sentence)
+  const pos = sub.indexOf(sentence)
   if (pos < 0) return Math.max(start, src.length - 200)
   let runStart = pos
   let prev = pos

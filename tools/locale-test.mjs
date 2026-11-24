@@ -1,9 +1,11 @@
 // 双语契约测试：字典中英齐全、界面文案随宿主 locale 切换、缺 locale 服务时退回中文。
 // 用法：node plugins/dsh-doom-loop-guard/tools/locale-test.mjs [client.js 路径]
 import assert from 'node:assert/strict'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const FILE = process.argv[2] || new URL('../client.js', import.meta.url).pathname.replace(/^\//, '')
+// 用 fileURLToPath 而不是 url.pathname：后者在 Linux 会得到 /home/...，
+// 去掉前导斜杠后变成相对路径，拼出来的 file:// URL 是错的（CI 实测）
+const FILE = process.argv[2] || fileURLToPath(new URL('../client.js', import.meta.url))
 
 const STATE = {
   version: '9.9.9',

@@ -28,7 +28,7 @@ function symbolCut (text) {
 /** 找循环真正开始的位置：同一句连续三次密集出现（间隔 ≤30 字符）的起点。 */
 function loopCut (text, sentence) {
   if (!sentence) return 0
-  let pos = text.indexOf(sentence)
+  const pos = text.indexOf(sentence)
   if (pos < 0) return 0
   let runStart = pos
   let prev = pos

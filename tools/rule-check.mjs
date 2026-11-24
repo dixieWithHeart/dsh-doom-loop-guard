@@ -6,7 +6,7 @@ import { measure, stripCode } from '../src/detect.js'
 const samples = JSON.parse(readFileSync(process.argv[2], 'utf8'))
 const rows = samples.map((s) => ({ label: s.label, m: measure(stripCode(s.text)).stats }))
 
-function classify (m, o) {
+function classify (m, _o) {
   const loopStrong = m.worstCount >= 15 && m.minRepeatGap > 0 && m.minRepeatGap <= 8 && m.shortRepeatRatio >= 0.05
   const symbolStrong = m.maxDashRun >= 800 || m.maxParenRun >= 200
   const symbolWeak = m.maxDashRun >= 300 || m.maxParenRun >= 60

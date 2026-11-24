@@ -2,7 +2,7 @@
  * 配置契约的单一来源。所有可调值都能在 cordis.patch.yml 里覆盖，用户的 patch 层随升级保留。
  */
 
-export const VERSION = '1.3.0'
+export const VERSION = '1.4.0'
 
 /** 插件在会话事件、注入消息、HTTP 路由里使用的统一前缀。 */
 export const PLUGIN_ID = 'dsh-doom-loop-guard'

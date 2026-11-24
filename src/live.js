@@ -44,7 +44,7 @@ function nudgeText (options, finding, percent) {
 }
 
 /** 主动截断后在会话里留下的说明。 */
-function cutText (options, finding, cut) {
+function _cutText (options, finding, cut) {
   const ban = options.banList ? `；接下来避免再次出现：${bannedOf(finding)}` : ''
   return `【Doom Loop Guard】输出在第 ${cut} 字符处开始连续重复，本次已截断${ban}。` +
     '请直接给出当前结论与下一步行动，不要重新展开推导。'
